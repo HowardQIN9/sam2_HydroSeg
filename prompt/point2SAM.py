@@ -91,15 +91,15 @@ def run_sam_with_prompts(prompts_dict, sam_checkpoint, model_type="vit_h",
 
 if __name__ == "__main__":
     # Paths customized for your environment
-    points_json = "/home/zqin74/RGB/points_output7.json"
-    sam_checkpoint_path = "/home/zqin74/git_repo/sam2/checkpoints/checkpoints/sam_vit_h_4b8939.pth"
+    points_json = "/home/zqin74/RGB/point_prompts11.json"
+    sam_checkpoint_path = "/home/zqin74/RGB/checkpoints/checkpoints/sam_vit_h_4b8939.pth"
     sam_model_type = "vit_h"
 
     # The actual folder containing your image files
-    image_root_dir = "/home/zqin74/RGB/Rasp1"
+    image_root_dir = "/home/zqin74/RGB/Rasp5"
 
     # Output folder for segmentation masks
-    output_dir = "/home/zqin74/RGB/Segmentation"
+    output_dir = "/home/zqin74/RGB/Seg_Rap5"
 
     # 1) Read the point prompts dictionary
     with open(points_json, 'r', encoding='utf-8') as f:
