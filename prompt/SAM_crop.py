@@ -36,8 +36,8 @@ def run_sam_inference(predictor, img_rgb, point_coords):
         masks_list.append(masks[0])
     return masks_list
 
-def save_mask_and_crop(img_bgr, mask, img_basename, label_name, output_dir, crop_dir):
-    """Saves the segmentation mask and crops the image based on the mask's bounding box."""
+def save_mask_and_crop(img_bgr, mask, img_basename, label_name, output_dir, crop_dir, padding=10):
+    """Saves the segmentation mask and crops the image based on the mask's bounding box with padding."""
     base_name = os.path.splitext(img_basename)[0]
     
     # Save mask
@@ -46,9 +46,16 @@ def save_mask_and_crop(img_bgr, mask, img_basename, label_name, output_dir, crop
     cv2.imwrite(mask_path, (mask * 255).astype("uint8"))
     print(f"Saved mask: {mask_path}")
     
-    # Find bounding box and crop image
+    # Find bounding box and apply padding
     x, y, w, h = cv2.boundingRect(mask.astype(np.uint8))
-    cropped_img = img_bgr[y:y+h, x:x+w]
+    height, width, _ = img_bgr.shape
+    
+    x1 = max(x - padding, 0)
+    y1 = max(y - padding, 0)
+    x2 = min(x + w + padding, width)
+    y2 = min(y + h + padding, height)
+    
+    cropped_img = img_bgr[y1:y2, x1:x2]
     
     # Save cropped image
     crop_filename = f"{base_name}_{label_name}_crop.jpg"
@@ -56,7 +63,7 @@ def save_mask_and_crop(img_bgr, mask, img_basename, label_name, output_dir, crop
     cv2.imwrite(crop_path, cropped_img)
     print(f"Saved cropped image: {crop_path}")
 
-def process_images(prompts_dict, predictor, image_root, output_dir, crop_dir, process_first_only=True):
+def process_images(prompts_dict, predictor, image_root, output_dir, crop_dir, process_first_only=True, padding=10):
     """Processes images with multiple keypoints, saving masks and cropped images.
         If process_first_only is True, only the first image in the JSON file will be processed.
     """
@@ -79,7 +86,7 @@ def process_images(prompts_dict, predictor, image_root, output_dir, crop_dir, pr
         masks = run_sam_inference(predictor, img_rgb, point_coords)
         
         for mask, label_name in zip(masks, mask_names):
-            save_mask_and_crop(img_bgr, mask, img_basename, label_name, output_dir, crop_dir)
+            save_mask_and_crop(img_bgr, mask, img_basename, label_name, output_dir, crop_dir, padding)
         
         # If process_first_only is True, stop after processing the first image
         if process_first_only:
@@ -87,12 +94,14 @@ def process_images(prompts_dict, predictor, image_root, output_dir, crop_dir, pr
 
 if __name__ == "__main__":
     # Paths
-    points_json = "/home/zqin74/RGB/point_prompts7.json"
+    points_json = "/home/zqin74/RGB/point_prompts11.json"
     sam_checkpoint_path = "/home/zqin74/RGB/checkpoints/checkpoints/sam_vit_h_4b8939.pth"
     sam_model_type = "vit_h"
-    image_root_dir = "/home/zqin74/RGB/Rasp1"
-    output_dir = "/home/zqin74/RGB/Seg_Rap1"
-    crop_output_dir = "/home/zqin74/RGB/Crop_Rap1"
+    image_root_dir = "/home/zqin74/RGB/Rasp5"
+    output_dir = "/home/zqin74/RGB/Seg_Rap5"
+    crop_output_dir = "/home/zqin74/RGB/Crop_Rap5"
+    
+    padding_value = 30  # Set padding value here
 
     # Load point prompts
     with open(points_json, 'r', encoding='utf-8') as f:
@@ -102,4 +111,4 @@ if __name__ == "__main__":
     predictor = load_sam_model(sam_checkpoint_path, sam_model_type)
 
     # Set process_first_only=True to process only the first image
-    process_images(prompts_dict, predictor, image_root_dir, output_dir, crop_output_dir, process_first_only=True)
+    process_images(prompts_dict, predictor, image_root_dir, output_dir, crop_output_dir, process_first_only=True, padding=padding_value)
