@@ -1,5 +1,3 @@
-# file: sam_inference7.py
-
 import os
 import cv2
 import json
@@ -23,7 +21,7 @@ def run_sam_with_prompts(prompts_dict, sam_checkpoint, model_type="vit_h",
     # 1) Initialize the SAM model
     print("Loading SAM model...")
     sam = sam_model_registry[model_type](checkpoint=sam_checkpoint)
-    sam.to(device="cuda" if torch.cuda.is_available() else "cpu")  # Fallback to CPU
+    sam.to(device="cuda" if torch.cuda.is_available() else "cpu")  # Use GPU if available, otherwise fallback to CPU
     predictor = SamPredictor(sam)
 
     # 2) Create output directory if needed
@@ -77,29 +75,41 @@ def run_sam_with_prompts(prompts_dict, sam_checkpoint, model_type="vit_h",
                 # 'masks' is a NumPy array of shape (1, H, W), we need (H, W)
                 mask_array = (masks[0] * 255).astype("uint8")  # Convert boolean mask to uint8
 
+                # Apply connected component analysis to filter out noise
+                num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(mask_array, connectivity=8)
+
+                if num_labels > 1:  # If there are multiple components
+                    # Identify the largest connected component (excluding the background)
+                    largest_label = 1 + np.argmax(stats[1:, cv2.CC_STAT_AREA])  # Skip background (label 0)
+
+                    # Create a mask keeping only the largest component
+                    filtered_mask = np.where(labels == largest_label, 255, 0).astype(np.uint8)
+                else:
+                    filtered_mask = mask_array  # If only one component, keep it as is
+
                 # Build filename
                 base_name = os.path.splitext(img_basename)[0]
                 mask_filename = f"{base_name}_{label_name}_mask.png"
                 save_path = os.path.join(output_dir, mask_filename)
 
-                # Save the mask
-                cv2.imwrite(save_path, mask_array)
-                print(f"Saved mask: {save_path}")
+                # Save the filtered mask
+                cv2.imwrite(save_path, filtered_mask)
+                print(f"Saved filtered mask: {save_path}")
 
             except Exception as e:
                 print(f"Error processing {img_basename} - {label_name}: {str(e)}")
 
 if __name__ == "__main__":
     # Paths customized for your environment
-    points_json = "/home/zqin74/RGB/point_prompts11.json"
+    points_json = "/home/zqin74/RGB/point_prompts7.json"
     sam_checkpoint_path = "/home/zqin74/RGB/checkpoints/checkpoints/sam_vit_h_4b8939.pth"
     sam_model_type = "vit_h"
 
     # The actual folder containing your image files
-    image_root_dir = "/home/zqin74/RGB/Rasp5"
+    image_root_dir = "/home/zqin74/RGB/Rasp1"
 
     # Output folder for segmentation masks
-    output_dir = "/home/zqin74/RGB/Seg_Rap5"
+    output_dir = "/home/zqin74/RGB/Seg_Rap1"
 
     # 1) Read the point prompts dictionary
     with open(points_json, 'r', encoding='utf-8') as f:

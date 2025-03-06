@@ -72,7 +72,7 @@ def label_studio_to_sam(json_path, output_json):
 
 # Run the conversion
 if __name__ == "__main__":
-    input_json_file = "/home/zqin74/RGB/project-11.json"  # Update with your file path
-    output_json_file = "/home/zqin74/RGB/point_prompts11.json"
+    input_json_file = "/home/zqin74/RGB/project-7.json"  # Update with your file path
+    output_json_file = "/home/zqin74/RGB/point_prompts7.json"
 
     label_studio_to_sam(input_json_file, output_json_file)
