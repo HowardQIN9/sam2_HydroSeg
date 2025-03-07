@@ -45,17 +45,28 @@ def run_sam_with_prompts(prompts_dict, sam_checkpoint, model_type="vit_h",
 
         for i, (point, label_name) in enumerate(zip(point_coords, mask_names)):
             try:
-                point_coords = np.array([point], dtype=np.float32)
-                point_labels = np.array([1], dtype=np.int32)
+                # 当前点作为正点 (label=1)，其余点作为负点 (label=0)
+                positive_point = np.array([point], dtype=np.float32)
+                negative_points = np.array([p for j, p in enumerate(point_coords) if j != i], dtype=np.float32)
 
+                # 组合正负点
+                if len(negative_points) > 0:
+                    all_points = np.vstack((positive_point, negative_points))
+                    all_labels = np.array([1] + [0] * len(negative_points), dtype=np.int32)
+                else:
+                    all_points = positive_point
+                    all_labels = np.array([1], dtype=np.int32)
+
+                # 进行 SAM 分割
                 masks, _, _ = predictor.predict(
-                    point_coords=point_coords,
-                    point_labels=point_labels,
+                    point_coords=all_points,
+                    point_labels=all_labels,
                     multimask_output=False
                 )
 
                 mask_array = (masks[0] * 255).astype("uint8")
 
+                # 仅保留最大连通区域，减少噪声
                 num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(mask_array, connectivity=8)
                 if num_labels > 1:
                     largest_label = 1 + np.argmax(stats[1:, cv2.CC_STAT_AREA])
