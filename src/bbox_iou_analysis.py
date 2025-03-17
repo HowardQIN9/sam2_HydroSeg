@@ -36,24 +36,15 @@ def gather_bboxes_for_day(bbox_data, date_yyyymmdd):
 
     for filename, file_data in bbox_data.items():
         if re.match(pattern_day, filename):
-            if isinstance(file_data, list):  # 兼容列表格式
-                bbox_entries = file_data
-            elif isinstance(file_data, dict) and "bboxes" in file_data:
-                bbox_entries = file_data["bboxes"]
-            else:
-                print(f"[ERROR] Unexpected format for {filename}: {type(file_data)}")
-                continue  # 跳过错误数据
-            
+            bbox_entries = file_data if isinstance(file_data, list) else file_data.get("bboxes", [])
             for bbox_entry in bbox_entries:
                 label = bbox_entry.get("label", None)
-                if label and (label not in label2bbox):
+                if label:
                     label2bbox[label] = bbox_entry["bbox"]
     
     return label2bbox
 
-
-def process_missing_bboxes(bad_case_json, bbox_json_path, image_folder, save_folder, crop_folder, json_output_path, iou_threshold=0.8, padding=10):
-    os.makedirs(save_folder, exist_ok=True)
+def process_missing_bboxes(bad_case_json, bbox_json_path, image_folder, crop_folder, json_output_path, iou_threshold=0.8, padding=10):
     os.makedirs(crop_folder, exist_ok=True)
     
     with open(bad_case_json, "r", encoding="utf-8") as f:
@@ -61,43 +52,104 @@ def process_missing_bboxes(bad_case_json, bbox_json_path, image_folder, save_fol
     with open(bbox_json_path, "r", encoding="utf-8") as f:
         bbox_data = json.load(f)
     
-    missing_bboxes = {}
-    for img_basename, current_bboxes in bad_cases.items():
+    # 记录所有可能的日期
+    all_dates = set()
+    for img_basename in bad_cases.keys():
         date_str = extract_date(img_basename)
-        if not date_str:
-            continue
+        if date_str:
+            all_dates.add(date_str)
+    
+    # 按日期排序
+    sorted_dates = sorted(list(all_dates))
+    
+    # 记录每个标签的最后已知正确的边界框
+    # 结构: {label: {"bbox": [...], "date": "YYYYMMDD"}}
+    last_correct_bboxes = {}
+    
+    # 只记录满足条件的缺失bbox
+    missing_bboxes = {}
+    
+    # 按日期顺序处理
+    for date_str in sorted_dates:
+        # 获取当天的所有bad cases
+        day_bad_cases = {}
+        for img_basename, current_bboxes in bad_cases.items():
+            if extract_date(img_basename) == date_str:
+                day_bad_cases[img_basename] = current_bboxes
+        
+        # 获取前一天的所有边界框（这些被视为"正确"的边界框）
         prev_date = get_previous_date(date_str)
         prev_label2bbox = gather_bboxes_for_day(bbox_data, prev_date)
-        for cur_bbox_entry in current_bboxes:
-            c_label = cur_bbox_entry.get("label", None)
-            c_bbox = cur_bbox_entry["bbox"]
-            if not c_label or c_label not in prev_label2bbox:
-                missing_bboxes.setdefault(img_basename, []).append({"bbox": c_bbox, "label": c_label or "Unknown"})
-                continue
-            prev_bbox = prev_label2bbox[c_label]
-            iou = compute_iou(c_bbox, prev_bbox)
-            if iou < iou_threshold:
-                missing_bboxes.setdefault(img_basename, []).append({"bbox": c_bbox, "label": c_label})
+        
+        # 将前一天的边界框添加到last_correct_bboxes（如果尚未存在）
+        for label, bbox in prev_label2bbox.items():
+            if label not in last_correct_bboxes:
+                last_correct_bboxes[label] = {"bbox": bbox, "date": prev_date}
+        
+        # 处理当天的bad cases
+        for img_basename, current_bboxes in day_bad_cases.items():
+            image_datetime = os.path.splitext(img_basename)[0]
+            
+            for cur_bbox_entry in current_bboxes:
+                c_label = cur_bbox_entry.get("label", None)
+                c_bbox = cur_bbox_entry["bbox"]
+                
+                # 如果标签不存在或者在last_correct_bboxes中没有对应记录
+                if not c_label or c_label not in last_correct_bboxes:
+                    missing_bboxes.setdefault(img_basename, []).append({
+                        "bbox": c_bbox,
+                        "label": c_label or "Unknown",
+                        "image_datetime": image_datetime
+                    })
+                    continue
+                
+                # 与最后已知正确的边界框进行比较，而不是前一天的
+                correct_bbox = last_correct_bboxes[c_label]["bbox"]
+                correct_date = last_correct_bboxes[c_label]["date"]
+                
+                iou = compute_iou(c_bbox, correct_bbox)
+                if iou < iou_threshold:
+                    missing_bboxes.setdefault(img_basename, []).append({
+                        "bbox": c_bbox,
+                        "label": c_label,
+                        "image_datetime": image_datetime,
+                        "compared_with_date": correct_date  # 添加与哪一天比较的信息
+                    })
+                else:
+                    # 如果IOU足够高，则更新last_correct_bboxes
+                    # 这表示当前边界框虽然在bad_cases中，但实际上可能是正确的
+                    last_correct_bboxes[c_label] = {"bbox": c_bbox, "date": date_str}
     
+    # 以下代码保持不变...
     with open(json_output_path, "w", encoding="utf-8") as f:
         json.dump(missing_bboxes, f, indent=4)
     
+    # 处理裁剪和保存图像
     for img_basename, bboxes in missing_bboxes.items():
         image_path = os.path.join(image_folder, img_basename)
+        if not os.path.exists(image_path):
+            continue
+            
         img = cv2.imread(image_path)
         if img is None:
             continue
+            
         img_h, img_w, _ = img.shape
+        
         for bbox_entry in bboxes:
             bbox = bbox_entry["bbox"]
             label = bbox_entry["label"]
+            image_datetime = bbox_entry["image_datetime"]
+            
             x_min, y_min, x_max, y_max = bbox
             x_min = max(x_min - padding, 0)
             y_min = max(y_min - padding, 0)
             x_max = min(x_max + padding, img_w - 1)
             y_max = min(y_max + padding, img_h - 1)
+            
             cropped = img[y_min:y_max, x_min:x_max]
-            crop_filename = f"{img_basename.split('.')[0]}_{label}_{x_min}_{y_min}_{x_max}_{y_max}_padded.jpg"
+            crop_filename = f"{image_datetime}_{label}_{x_min}_{y_min}_{x_max}_{y_max}_padded.jpg"
             crop_path = os.path.join(crop_folder, crop_filename)
             cv2.imwrite(crop_path, cropped)
+            
     return missing_bboxes
