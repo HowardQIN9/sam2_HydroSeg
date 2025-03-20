@@ -28,7 +28,7 @@ def main(points_json, sam_checkpoint_path, image_root_dir, output_dir,
         prompts_list = json.load(f) 
 
     # # Step 1: Run SAM segmentation to generate masks
-    # run_sam(prompts_list, sam_checkpoint_path, image_root=image_root_dir, output_dir=output_dir, mask_json_output=mask_json_output)
+    run_sam(prompts_list, sam_checkpoint_path, image_root=image_root_dir, output_dir=output_dir, mask_json_output=mask_json_output)
 
     # # Step 2: Generate bounding boxes from masks
     generate_bboxes(mask_json_output, bbox_json_output)
@@ -68,12 +68,12 @@ if __name__ == "__main__":
 
     # i 从 1 跑到 5，并且 points_json 的数字从 7 到 11
     for i in range(1, 6):
-        if i>1:
-            break
+        # if i>2:
+        #     break
 
         points_json = f"/home/zqin74/MSI/point_prompt/point_prompts{i}.json"
         image_root_dir = f"/home/zqin74/MSI/MS{i}"
-        output_dir = f"/home/zqin74/MSI/Seg_Rap{i}"
+        output_dir = f"/home/zqin74/MSI/Seg_MSI{i}"
         mask_json_output = f"/home/zqin74/MSI/ts/masks{i}.json"
         bbox_json_output = f"/home/zqin74/MSI/ts/bboxes{i}.json"
         bad_case_json_output = f"/home/zqin74/MSI/ts/bad_case{i}.json"

@@ -15,9 +15,25 @@ def run_sam(prompts_list, sam_checkpoint, model_type="vit_h",
     predictor = SamPredictor(sam)
 
     os.makedirs(output_dir, exist_ok=True)
+    # Create directory for mask_json_output if it doesn't exist
+    json_output_dir = os.path.dirname(mask_json_output)
+    if json_output_dir:  # Check if there's a directory component
+        os.makedirs(json_output_dir, exist_ok=True)
+    
+    # Clear existing JSON file if it exists
+    if os.path.exists(mask_json_output):
+        # print(f"Clearing existing file: {mask_json_output}")
+        open(mask_json_output, 'w').close()  # This will empty the file
+
     mask_dict = {}
+    total_images = len(prompts_list)
+    image_counter = 0
 
     for img_basename, image_data in prompts_list.items():
+
+        image_counter +=1
+        print(f"Processing image {image_counter}/{total_images}: {img_basename}")
+
         image_path = os.path.join(image_root, img_basename)
         img_bgr = cv2.imread(image_path)
         if img_bgr is None:
